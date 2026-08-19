@@ -6,7 +6,6 @@
     </head>
     <body>
         <video id="video" autoplay playsinline> </video>
-        <audio src="outfoxing.mp3" controls></audio>
 
         <input id="playButton" type="button" value="Play" />
         <input id="stopButton" type="button" value="Stop" />
@@ -14,36 +13,49 @@
         <script type="text/javascript">
             const playButton = document.getElementById("playButton");
             const stopButton = document.getElementById("stopButton");
-            const audioElement = document.querySelector("audio");
+            playButton.addEventListener("click", play, false);
+            stopButton.addEventListener("click", stop, false);
+
             let audioCtx;
-            let track;
-
-            playButton.addEventListener(
-                "click",
-                () => {
-                    if (!audioCtx) initAudio();
-                    audioElement.play();
-                },
-                false
-            );
-
-            stopButton.addEventListener(
-                "click",
-                () => {
-                    audioElement.pause();
-                },
-                false
-            );
+            let buffer;
+            let N;
+            let source;
 
             function initAudio()
             {
+                console.log("initAudio");
                 audioCtx = new AudioContext();
-                track = new MediaElementAudioSourceNode(
-                    audioCtx,
-                    { mediaElement: audioElement, }
-                );
+                N = audioCtx.sampleRate; // 1-second buffer
+                buffer = new AudioBuffer({
+                    numberOfChannels: 1,
+                    length: N,
+                    sampleRate: audioCtx.sampleRate,
+                });
 
-                track.connect(audioCtx.destination);
+                // Fill audio buffer with something to be going on with
+                // Sample values should be between -1.0 and +1.0
+                const buf = buffer.getChannelData(0);
+                for (let i=0 ; i<N ; ++i) {
+                    buf[i] = Math.sin(i * 2.0 * Math.pi * 440.0 / N);
+                }
+                console.log("N: ", N);
+            }
+
+            function play()
+            {
+                console.log("play");
+                if (!audioCtx) initAudio();
+
+                source = audioCtx.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioCtx.destination);
+                source.start();
+            }
+
+            function stop()
+            {
+                console.log("stop");
+                source.stop();
             }
         </script>
 
