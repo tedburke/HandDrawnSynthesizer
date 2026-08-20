@@ -60,3 +60,8 @@ git add .
 git commit -m "Added notes.txt to keep snippets in."
 git push origin main
 
+Alternatively,
+
+git commit -a -m "Commit message goes here."
+git push origin main
+
