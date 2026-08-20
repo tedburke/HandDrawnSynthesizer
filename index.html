@@ -15,8 +15,6 @@
             let source;
             let midi = null; // global MIDIAccess object
 
-            const playButton = document.getElementById("playButton");
-            const playButton2 = document.getElementById("playButton2");
             const stopButton = document.getElementById("stopButton");
 
             //stopButton.addEventListener("click", stop, false);
@@ -123,8 +121,12 @@
                 console.log("MIDI ready!");
                 // store in the global (in real usage, would probably keep in an object instance)
                 midi = midiAccess; 
-                listInputsAndOutputs(midi);
-                startLoggingMIDIInput(midi);
+                listMIDIInputsAndOutputs(midi);
+
+                // Start processing incoming MIDI data
+                midi.inputs.forEach((entry) => {
+                    entry.onmidimessage = onMIDIMessage;
+                });
             }
 
             function onMIDIFailure(msg)
@@ -132,7 +134,7 @@
                 console.error(`Failed to get MIDI access - ${msg}`);
             }
 
-            function listInputsAndOutputs(midiAccess)
+            function listMIDIInputsAndOutputs(midiAccess)
             {
                 console.log("MIDI inputs:");
                 for (const entry of midiAccess.inputs)
@@ -159,13 +161,6 @@
                         ` version:'${output.version}'`,
                     );
                 }
-            }
-
-            function startLoggingMIDIInput(midiAccess)
-            {
-                midiAccess.inputs.forEach((entry) => {
-                    entry.onmidimessage = onMIDIMessage;
-                });
             }
 
         </script>
