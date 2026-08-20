@@ -12,7 +12,7 @@
             let audioCtx;
             let buffer;
             let N;
-            let source;
+            let sources = Array(128).fill(null);
             let midi = null; // global MIDIAccess object
 
             const stopButton = document.getElementById("stopButton");
@@ -25,14 +25,6 @@
 
             function onMIDIMessage(event)
             {
-                let str = `MIDI message received at timestamp ` +
-                    `${event.timeStamp}[${event.data.length} bytes]: `;
-                for (const character of event.data)
-                {
-                    str += `0x${character.toString(16)} `;
-                }
-                console.log(str);
-
                 if (event.data[0] == 0x90)
                 {
                     noteOn(event.data[1], event.data[2]);
@@ -40,6 +32,16 @@
                 else if (event.data[0] == 0x80)
                 {
                     noteOff(event.data[1], event.data[2]);
+                }
+                else
+                {
+                    let str = `MIDI message received at timestamp ` +
+                        `${event.timeStamp}[${event.data.length} bytes]: `;
+                    for (const character of event.data)
+                    {
+                        str += `0x${character.toString(16)} `;
+                    }
+                    console.log(str);
                 }
             }
 
@@ -52,22 +54,35 @@
                 const semitone = 1.059463094359295;
                 let f = 440.0 * 2.0**((noteNumber-69.0)/12.0);
 
-                source = audioCtx.createBufferSource();
+                // If an existing source is playing this note then
+                // stop it and null that element in sources array
+                if (sources[noteNumber])
+                {
+                    sources[noteNumber].stop();
+                    sources[noteNumber] = null;
+                }
+
+                // Create a new source to play this note
+                let source = audioCtx.createBufferSource();
                 source.buffer = buffer;
                 source.connect(audioCtx.destination);
                 source.loop = true;
                 source.playbackRate.value = f * 1024 / audioCtx.sampleRate;
                 source.start();
 
-                source.onended = () => {
-                    console.log("note finished");
-                }
+                // Remember the new source so that we can stop it later
+                sources[noteNumber] = source;
+
+                //source.onended = () => {
+                //    console.log("note finished");
+                //}
             }
 
             function noteOff(noteNumber, noteVelocity)
             {
                 console.log(`Note off: noteNumber=${noteNumber}, noteVelocity=${noteVelocity}`);
-                source.stop();
+                sources[noteNumber].stop();
+                sources[noteNumber] = null;
             }
 
             function initAudio()
