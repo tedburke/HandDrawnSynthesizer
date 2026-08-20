@@ -10,11 +10,16 @@
         <input id="playButton" type="button" value="Play" />
         <input id="stopButton" type="button" value="Stop" />
 
+        <input id="playButton2" type="button" value="Play2" />
+
         <script type="text/javascript">
             const playButton = document.getElementById("playButton");
             const stopButton = document.getElementById("stopButton");
             playButton.addEventListener("click", play, false);
             stopButton.addEventListener("click", stop, false);
+
+            const playButton2 = document.getElementById("playButton2");
+            playButton2.addEventListener("click", play, false);
 
             let audioCtx;
             let buffer;
@@ -25,31 +30,40 @@
             {
                 console.log("initAudio");
                 audioCtx = new AudioContext();
-                N = audioCtx.sampleRate; // 1-second buffer
-                buffer = new AudioBuffer({
-                    numberOfChannels: 1,
-                    length: N,
-                    sampleRate: audioCtx.sampleRate,
-                });
+                //N = audioCtx.sampleRate; // 1-second buffer
+                N = 1024;
+                buffer = audioCtx.createBuffer(1, N, audioCtx.sampleRate);
 
-                // Fill audio buffer with something to be going on with
+                // Fill audio buffer with test signal
                 // Sample values should be between -1.0 and +1.0
                 const buf = buffer.getChannelData(0);
-                for (let i=0 ; i<N ; ++i) {
-                    buf[i] = Math.sin(i * 2.0 * Math.pi * 440.0 / N);
+                for (let i=0 ; i<N ; i++) {
+                    buf[i] = Math.sin(i * 2.0 * Math.PI / N);
                 }
                 console.log("N: ", N);
             }
 
-            function play()
+            function play(event)
             {
-                console.log("play");
+                let f;
+
+                console.log(`play ${event.srcElement.id}`);
                 if (!audioCtx) initAudio();
+
+                const semitone = 1.059463094;
+                if (event.srcElement.id == "playButton") f = 440;
+                else f = 440 * semitone * semitone;
 
                 source = audioCtx.createBufferSource();
                 source.buffer = buffer;
                 source.connect(audioCtx.destination);
+                source.loop = true;
+                source.playbackRate.value = f * 1024 / audioCtx.sampleRate;
                 source.start();
+
+                source.onended = () => {
+                    console.log("note finished");
+                }
             }
 
             function stop()
