@@ -2,4 +2,50 @@ php -S localhost:8000
 
 sudo apt install vmpk
 
+-------
+
+To create SSH key pair:
+
+To create a new SSH key:
+
+ssh-keygen -t rsa -b 4096 -C "my.name@myemail.com"
+
+- I accepted default file to save key in.
+- I left the passphrase blank.
+
+Copy the contents of ~/.ssh/id_ssh.pub to:
+
+GitHub -> Settings -> SSH and GPG keys -> SSH keys -> Authentication keys -> New SSH key
+
+To add the new key to ssh-agent:
+
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_rsa
+
+To test the ssh connection to GitHub:
+
+ssh -T git@github.com
+
+To check the current remote URL for the repo, cd into the repo folder and run:
+
+git remote -v
+
+If the URL starts with https, then it needs to be updated to ssh as follows:
+
+git remote set-url origin git@github.com:tedburke/HandDrawnSynthesizer.git
+
+Check again with 'git remote -v'.
+
+-------
+
+To set up git config on the local machine:
+
+git config --global user.email "my.name@myemail.com"
+git config --global user.name "Ted Burke"
+
+To commit changes and push to GitHub:
+
+git add .
+git commit -m "Added notes.txt to keep snippets in."
+git push origin main
 
