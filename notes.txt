@@ -4,6 +4,17 @@ sudo apt install vmpk
 
 -------
 
+To increase number printing precision in GNU Octave:
+
+output_precision(16)
+
+To calculate the ratio of frequencies of two musical notes one semitone apart in GNU Octave:
+
+semitone = 2 ^ (1/12)
+semitone = 1.059463094359295
+
+-------
+
 To create SSH key pair:
 
 To create a new SSH key:
