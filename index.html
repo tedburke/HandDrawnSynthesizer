@@ -22,6 +22,11 @@
     <canvas id="vidCanvas" width="800" height="600"></canvas>
     <div id="controls">
         <input id="stopButton" type="button" value="Stop" />
+        <label for="attack">Attack</label>
+        <input name="attack" id="attackRange" type="range" min="0" max="0.25" value="0" step="0.01" />
+
+        <label for="release">Release</label>
+        <input name="release" id="releaseRange" type="range" min="0" max="2.0" value="0" step="0.1" />
         <div id="statusDiv">Hello!</div>
     </div>
     <canvas id="waveCanvas" width="800" height="300"></canvas>
@@ -31,21 +36,36 @@
         let buffer;
         let N;
         let sources = Array(128).fill(null);
+        let envelopes = Array(128).fill(null);
+        let noteTimes = Array(128).fill(null);
+        let noteVelocities = Array(128).fill(null);
         let midi = null; // global MIDIAccess object
+
+        let attackTime = 0.10;
+        let releaseTime = 0.5;
 
         const vid = document.querySelector("#vid");
         const vidCanvas = document.querySelector("#vidCanvas")
         const stopButton = document.querySelector("#stopButton");
         const statusDiv = document.querySelector("#statusDiv");
-        const waveCanvas = document.querySelector("#waveCanvas")
+        const waveCanvas = document.querySelector("#waveCanvas");
+        const attackRange = document.querySelector("#attackRange");
+        const releaseRange = document.querySelector("#releaseRange");
+
+        attackRange.value = attackTime;
+        releaseRange.value = releaseTime;
+
+        attackRange.addEventListener("input", (ev) => {
+            attackTime = parseFloat(ev.target.value);
+        });
+        releaseRange.addEventListener("input", (ev) => {
+            releaseTime = parseFloat(ev.target.value);
+        });
 
         let vidctx, wavectx;
         let w_vid=800, h_vid=600;
         let w_wave=800, h_wave=300;
-
-        // Not doing anything with button currently,
-        // but leaving this here for future reference
-        //stopButton.addEventListener("click", stop, false);
+        N = w_vid;
 
         navigator.requestMIDIAccess({ sysex: false }).then(onMIDISuccess, onMIDIFailure);
 
@@ -54,13 +74,11 @@
         window.onload = function()
         {
             window.onresize();
-            window.setInterval(draw, 1000);
+            window.setInterval(draw, 100);
         }
 
         window.onresize = function()
         {
-            statusDiv.textContent = `window size: ${window.innerWidth}x${window.innerHeight}`;
-
             vidctx = vidCanvas.getContext("2d");
             wavectx = waveCanvas.getContext("2d");
         }
@@ -83,24 +101,32 @@
                     val = p[m] + p[m+1] + p[m+2];
                     if (val > wave[x]) wave[x] = val;
                 }
+                wave[x] /= 128.0;
             }
+
+            // Subtract mean from the captured wave
+            let mean = 0;
+            for (x=0 ; x<N ; ++x) mean += wave[x];
+            mean /= N;
+            for (x=0 ; x<N ; ++x) wave[x] -= mean;
 
             wavectx.clearRect(0, 0, w_wave, h_wave);
             wavectx.beginPath();
             wavectx.strokeStyle = "#3F3F3F";
             wavectx.lineWidth = 1.0;
-            wavectx.moveTo(0, wave[0]/4);
+            wavectx.moveTo(0, h_wave * (1.0 - wave[0]));
             for (x=1 ; x<w_wave ; ++x)
             {
-                wavectx.lineTo(x, wave[x]/4);
+                wavectx.lineTo(x, h_wave * (1.0 - wave[x]));
             }
             wavectx.stroke();
 
             const buf = buffer.getChannelData(0);
             for (let i=0 ; i<w_wave ; i++) {
-                //buf[i] = Math.sin(i * 2.0 * Math.PI / N);
                 buf[i] = -1 + wave[i]*2.0/1024.0;
             }
+
+            statusDiv.textContent = `attack:${attackTime}s, release:${releaseTime}s`;
         }
 
         function onMIDIMessage(event)
@@ -131,7 +157,7 @@
 
             console.log(`Note on: noteNumber=${noteNumber}, noteVelocity=${noteVelocity}`);
 
-            const semitone = 1.059463094359295;
+            //const semitone = 1.059463094359295;
             let f = 440.0 * 2.0**((noteNumber-69.0)/12.0);
 
             // If an existing source is playing this note then
@@ -142,43 +168,61 @@
                 sources[noteNumber] = null;
             }
 
+            // Get current time
+            let now = audioCtx.currentTime;
+
             // Create a new source to play this note
             let source = audioCtx.createBufferSource();
             source.buffer = buffer;
-            source.connect(audioCtx.destination);
             source.loop = true;
-            source.playbackRate.value = f * 1024 / audioCtx.sampleRate;
+            //source.playbackRate.value = f * 1024 / audioCtx.sampleRate;
+            source.playbackRate.value = f * N / audioCtx.sampleRate;
+            let envelope = new GainNode(audioCtx);
+            envelope.gain.setValueAtTime(0, now);
+            envelope.gain.linearRampToValueAtTime(noteVelocity/128.0, now + attackTime)
+            source.connect(envelope).connect(audioCtx.destination);
             source.start();
 
             // Remember the new source so that we can stop it later
             sources[noteNumber] = source;
-
-            //source.onended = () => {
-            //    console.log("note finished");
-            //}
+            envelopes[noteNumber] = envelope;
+            noteTimes[noteNumber] = now;
+            noteVelocities[noteNumber] = noteVelocity;
         }
 
         function noteOff(noteNumber, noteVelocity)
         {
             console.log(`Note off: noteNumber=${noteNumber}, noteVelocity=${noteVelocity}`);
-            sources[noteNumber].stop();
+            // Either start release now or at end of attack, whichever comes later
+            let t = audioCtx.currentTime;
+            if (noteTimes[noteNumber] + attackTime > t)
+            {
+                t = noteTimes[noteNumber] + attackTime ;
+            }
+            let envelope = envelopes[noteNumber];
+            envelope.gain.setValueAtTime(noteVelocities[noteNumber]/128.0, t);
+            envelope.gain.linearRampToValueAtTime(0, t + releaseTime);
+            sources[noteNumber].stop(t + releaseTime);
             sources[noteNumber] = null;
+            envelopes[noteNumber] = null;
+            noteTimes[noteNumber] = null;
+            noteVelocities[noteNumber] = null;
         }
 
         function initAudio()
         {
             console.log("initAudio");
             audioCtx = new AudioContext();
-            N = 1024;
+            //N = 1024;
             buffer = audioCtx.createBuffer(1, N, audioCtx.sampleRate);
 
             // Fill audio buffer with test signal
             // Sample values should be between -1.0 and +1.0
-            const buf = buffer.getChannelData(0);
-            for (let i=0 ; i<N ; i++) {
-                buf[i] = Math.sin(i * 2.0 * Math.PI / N);
-            }
-            console.log("N: ", N);
+            //const buf = buffer.getChannelData(0);
+            //for (let i=0 ; i<N ; i++) {
+            //    buf[i] = Math.sin(i * 2.0 * Math.PI / N);
+            //}
+            //console.log("N: ", N);
         }
 
         async function openBestResolution()
