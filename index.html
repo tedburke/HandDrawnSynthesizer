@@ -13,7 +13,7 @@
             border: 5px solid blue;
         }
         #statusDiv {display: inline-block; border: 2px dotted black;}
-        #waveCanvas {border: 5px solid green;}
+        #waveCanvas {border: 5px solid magenta;}
     </style>
 </head>
 
@@ -21,15 +21,21 @@
     <video id="vid" autoplay playsinline> </video>
     <canvas id="vidCanvas" width="800" height="600"></canvas>
     <div id="controls">
-        <input id="stopButton" type="button" value="Stop" />
         <label for="attack">Attack</label>
         <input name="attack" id="attackRange" type="range" min="0" max="0.25" value="0" step="0.01" />
 
         <label for="release">Release</label>
         <input name="release" id="releaseRange" type="range" min="0" max="2.0" value="0" step="0.1" />
         <div id="statusDiv">Hello!</div>
+        <div>
+            <input type="radio" name="captureMethod" value="max" id="CMmaxRadio">
+            <label for="CMmaxRadio">max px val in each column</label>
+            <input type="radio" name="captureMethod" value="argmin" id="CMargminRadio">
+            <label for="CMargminRadio">y coord of min in each column</label>
+        </div>
+
     </div>
-    <canvas id="waveCanvas" width="800" height="300"></canvas>
+    <canvas id="waveCanvas" width="800" height="200"></canvas>
 
     <script type="text/javascript">
         let audioCtx;
@@ -39,21 +45,23 @@
         let envelopes = Array(128).fill(null);
         let noteTimes = Array(128).fill(null);
         let noteVelocities = Array(128).fill(null);
-        let midi = null; // global MIDIAccess object
+        let midi = null;
 
         let attackTime = 0.10;
         let releaseTime = 0.5;
 
         const vid = document.querySelector("#vid");
         const vidCanvas = document.querySelector("#vidCanvas")
-        const stopButton = document.querySelector("#stopButton");
         const statusDiv = document.querySelector("#statusDiv");
         const waveCanvas = document.querySelector("#waveCanvas");
         const attackRange = document.querySelector("#attackRange");
         const releaseRange = document.querySelector("#releaseRange");
+        const CMmaxRadio = document.querySelector("#CMmaxRadio");
+        const CMargminRadio = document.querySelector("#CMargminRadio");
 
         attackRange.value = attackTime;
         releaseRange.value = releaseTime;
+        CMmaxRadio.checked = true;
 
         attackRange.addEventListener("input", (ev) => {
             attackTime = parseFloat(ev.target.value);
@@ -64,8 +72,12 @@
 
         let vidctx, wavectx;
         let w_vid=800, h_vid=600;
-        let w_wave=800, h_wave=300;
+        let w_wave=800, h_wave=256;
         N = w_vid;
+
+        // Update wave canvas width and height
+        waveCanvas.width = w_wave;
+        waveCanvas.height = h_wave;
 
         navigator.requestMIDIAccess({ sysex: false }).then(onMIDISuccess, onMIDIFailure);
 
@@ -79,7 +91,10 @@
 
         window.onresize = function()
         {
-            vidctx = vidCanvas.getContext("2d");
+            // Note: I added the willReadFrequently as suggested by a warning
+            // from Chromium saying that multiple readback operations are
+            // faster when it's set.
+            vidctx = vidCanvas.getContext("2d", { willReadFrequently: true });
             wavectx = waveCanvas.getContext("2d");
         }
 
@@ -91,17 +106,43 @@
             let p = idata.data;                                  // extract pixel data
             let x, y, m;
 
-            // Fill wave array with max values from pixel columns
+            // Create an array to store captured wave
             wave = Array(w_vid).fill(0);
-            for (x=0 ; x<w_vid; x++)
+
+            // Fill wave array with max values from pixel columns
+            // Samples should end up betwen 0 and 2 before 
+            if (CMmaxRadio.checked)
             {
-                for (y=0 ; y<h_vid; y++)
+                for (x=0 ; x<w_vid; x++)
                 {
-                    m = 4 * (y*w_vid + x);
-                    val = p[m] + p[m+1] + p[m+2];
-                    if (val > wave[x]) wave[x] = val;
+                    for (y=0 ; y<h_vid; y++)
+                    {
+                        m = 4 * (y*w_vid + x);
+                        val = p[m] + p[m+1] + p[m+2];
+                        if (val > wave[x]) wave[x] = val;
+                    }
+                    //wave[x] /= 512.0; // almost right but still some clipping
+                    wave[x] /= 1024.0;
                 }
-                wave[x] /= 512.0;
+            }
+
+            // Alternative wave capture using argmin
+            else if (CMargminRadio.checked)
+            {
+                for (x=0 ; x<w_vid; x++)
+                {
+                    let min = 1024.0;
+                    for (y=0 ; y<h_vid; y++)
+                    {
+                        m = 4 * (y*w_vid + x);
+                        val = p[m] + p[m+1] + p[m+2];
+                        if (val < min)
+                        {
+                            min = val;
+                            wave[x] = (h_vid-y)*2.0/h_vid;
+                        }
+                    }
+                }
             }
 
             // Subtract mean from the captured wave
@@ -115,13 +156,15 @@
             wavectx.strokeStyle = "#3F3F3F";
             wavectx.lineWidth = 1.0;
             wavectx.moveTo(0, h_wave * (0.5 - wave[0]));
-            for (x=1 ; x<w_wave ; ++x) wavectx.lineTo(x, h_wave * (0.5 - wave[x]));
+            for (x=1 ; x<w_wave ; ++x) wavectx.lineTo(x, h_wave * (0.5 + 0.5*wave[x]));
             wavectx.stroke();
 
-            const buf = buffer.getChannelData(0);
-            for (let i=0 ; i<N ; i++) {
-                buf[i] = wave[i];
+            if (audioCtx)
+            {
+                const buf = buffer.getChannelData(0);
+                for (let i=0 ; i<N ; i++) buf[i] = wave[i];
             }
+            else initAudio();
 
             statusDiv.textContent = `attack:${attackTime}s, release:${releaseTime}s`;
         }
