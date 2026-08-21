@@ -18,6 +18,8 @@
             const video = document.getElementById("video");
             const stopButton = document.getElementById("stopButton");
 
+            // Not doing anything with button currently,
+            // but leaving this here for future reference
             //stopButton.addEventListener("click", stop, false);
 
             navigator.requestMIDIAccess({ sysex: false }).then(onMIDISuccess, onMIDIFailure);
