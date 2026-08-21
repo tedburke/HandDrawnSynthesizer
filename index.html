@@ -101,7 +101,7 @@
                     val = p[m] + p[m+1] + p[m+2];
                     if (val > wave[x]) wave[x] = val;
                 }
-                wave[x] /= 128.0;
+                wave[x] /= 512.0;
             }
 
             // Subtract mean from the captured wave
@@ -114,16 +114,13 @@
             wavectx.beginPath();
             wavectx.strokeStyle = "#3F3F3F";
             wavectx.lineWidth = 1.0;
-            wavectx.moveTo(0, h_wave * (1.0 - wave[0]));
-            for (x=1 ; x<w_wave ; ++x)
-            {
-                wavectx.lineTo(x, h_wave * (1.0 - wave[x]));
-            }
+            wavectx.moveTo(0, h_wave * (0.5 - wave[0]));
+            for (x=1 ; x<w_wave ; ++x) wavectx.lineTo(x, h_wave * (0.5 - wave[x]));
             wavectx.stroke();
 
             const buf = buffer.getChannelData(0);
-            for (let i=0 ; i<w_wave ; i++) {
-                buf[i] = -1 + wave[i]*2.0/1024.0;
+            for (let i=0 ; i<N ; i++) {
+                buf[i] = wave[i];
             }
 
             statusDiv.textContent = `attack:${attackTime}s, release:${releaseTime}s`;
